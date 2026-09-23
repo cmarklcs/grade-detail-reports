@@ -225,6 +225,7 @@
   <section class="card no-print actions" id="actionBar" hidden>
     <button class="primary" id="generateBtn">Update preview</button>
     <button class="primary" id="downloadBtn" hidden>Download PDF</button>
+    <button class="secondary" id="printAllBtn" hidden>Print</button>
     <span class="note" id="actionNote">Preview updates below.</span>
   </section>
 
@@ -269,6 +270,7 @@
   const actionBar = document.getElementById('actionBar');
   const generateBtn = document.getElementById('generateBtn');
   const downloadBtn = document.getElementById('downloadBtn');
+  const printAllBtn = document.getElementById('printAllBtn');
   const actionNote = document.getElementById('actionNote');
   const printTip = document.getElementById('printTip');
   const preview = document.getElementById('preview');
@@ -296,7 +298,8 @@
     const pending = downloadMode === 'pending';
     const ready = downloadMode === 'claude' || downloadMode === 'browser';
     downloadBtn.hidden = !(lastPageCount > 0 && ready);
-    printTip.hidden = !(lastPageCount > 0 && !ready && !pending);
+    printAllBtn.hidden = !(lastPageCount > 0 && downloadMode === 'browser');
+    printTip.hidden = !(lastPageCount > 0 && downloadMode === 'none');
     actionNote.textContent = 'Preview updates below.' + (lastPageCount > 0 && pending ? ' Checking for PDF download…' : '');
   }
 
@@ -612,28 +615,42 @@
     return hit ? hit.value : undefined;
   }
 
+  const CATEGORY_ORDER = ['checkpoint', 'formative', 'summative'];
+  const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+
+  function categoryRank(category){
+    if (!category) return CATEGORY_ORDER.length;
+    const lc = category.toLowerCase();
+    const idx = CATEGORY_ORDER.findIndex(c => lc.startsWith(c));
+    return idx === -1 ? CATEGORY_ORDER.length : idx;
+  }
+
+  function dueSortKey(due){
+    const m = due && due.match(/(\d{1,2})\s+([A-Za-z]{3,})/);
+    const mon = m && MONTHS[m[2].slice(0,3).toLowerCase()];
+    return (m && mon !== undefined) ? mon * 100 + parseInt(m[1], 10) : 999999;
+  }
+
+  function sortedAssignments(assignments){
+    return assignments.slice().sort((a, b) => {
+      const catDiff = categoryRank(a.category) - categoryRank(b.category);
+      return catDiff !== 0 ? catDiff : dueSortKey(a.due) - dueSortKey(b.due);
+    });
+  }
+
   function renderStudentPage(course, student, index){
     const displayCourse = course.courseNameOverride !== undefined ? course.courseNameOverride : course.courseName;
     const displayTerm = course.termLabelOverride !== undefined ? course.termLabelOverride : course.termLabel;
     const genDate = new Date().toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 
     const overallScore = findSummaryVal(student.summary, /overall score/i);
-    const otherSummary = student.summary.filter(s => !/final grade/i.test(s.label) && !/overall score/i.test(s.label));
 
     let summaryHtml = '<div class="summary"><div class="herorow">';
     summaryHtml += `<div class="stat hero"><span class="k">Overall Score</span><span class="v">${fmtVal(overallScore)}</span></div>`;
-    summaryHtml += '</div>';
-    if (otherSummary.length){
-      summaryHtml += '<div class="statrow">';
-      otherSummary.forEach(s => {
-        summaryHtml += `<div class="stat"><span class="k">${escapeHtml(s.label.replace(/^\(|\)$/g,''))}</span><span class="v">${fmtVal(s.value)}</span></div>`;
-      });
-      summaryHtml += '</div>';
-    }
-    summaryHtml += '</div>';
+    summaryHtml += '</div></div>';
 
     let rowsHtml = '';
-    student.assignments.forEach(a => {
+    sortedAssignments(student.assignments).forEach(a => {
       const scoreText = a.score === null ? '—' : (fmtVal(a.score) + (a.maxPoints ? ' / ' + a.maxPoints : ''));
       rowsHtml += `<tr>
         <td>${escapeHtml(a.title)}</td>
@@ -727,7 +744,6 @@
     y += 16;
 
     const overallScore = findSummaryVal(student.summary, /overall score/i);
-    const otherSummary = student.summary.filter(s => !/final grade/i.test(s.label) && !/overall score/i.test(s.label));
     const usableW = pageW - margin * 2;
 
     const heroH = 48;
@@ -741,28 +757,13 @@
     doc.text(overallScore === null || overallScore === undefined ? '—' : String(overallScore), margin + 12, y + 42);
     y += heroH;
 
-    if (otherSummary.length){
-      const rowH = 32;
-      const colW = usableW / otherSummary.length;
-      doc.setDrawColor.apply(doc, PDF_LINE); doc.setLineWidth(0.75);
-      doc.rect(margin, y, usableW, rowH);
-      otherSummary.forEach((s, idx) => {
-        const x = margin + idx * colW;
-        if (idx > 0){ doc.line(x, y, x, y + rowH); }
-        doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor.apply(doc, PDF_SOFT);
-        doc.text(String(s.label.replace(/^\(|\)$/g,'')).toUpperCase(), x + 8, y + 13);
-        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor.apply(doc, PDF_INK);
-        doc.text(s.value === null || s.value === undefined ? '—' : String(s.value), x + 8, y + 26);
-      });
-      y += rowH;
-    }
     y += 18;
 
     doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor.apply(doc, PDF_NAVY);
     doc.text('Assignment detail', margin, y);
     y += 6;
 
-    const bodyRows = student.assignments.map(a => [
+    const bodyRows = sortedAssignments(student.assignments).map(a => [
       a.title,
       a.category || '—',
       a.due || '—',
@@ -860,6 +861,7 @@
 
   generateBtn.addEventListener('click', generatePreview);
   downloadBtn.addEventListener('click', handleDownload);
+  printAllBtn.addEventListener('click', () => window.print());
 
   const helpBtn = document.getElementById('helpBtn');
   const helpOverlay = document.getElementById('helpOverlay');
