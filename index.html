@@ -131,6 +131,8 @@
   .summary .stat.hero{background:var(--surface); border-top:3px solid var(--gold); display:flex; flex-direction:column; gap:4px; padding:14px 16px;}
   .summary .stat.hero .k{color:var(--ink-soft); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:700;}
   .summary .stat.hero .v{font-family:'IBM Plex Mono',monospace; font-size:30px; font-weight:700; color:var(--heading);}
+  .summary .stat.hero.fail{border-top-color:var(--danger);}
+  .summary .stat.hero.fail .v{color:var(--danger);}
   .summary .statrow{display:flex; flex-wrap:wrap; border-top:1px solid var(--line-soft);}
   .summary .statrow .stat{flex:1; min-width:100px; padding:11px 14px; border-right:1px solid var(--line-soft); background:var(--surface-2); display:flex; flex-direction:column; gap:4px;}
   .summary .statrow .stat:last-child{border-right:none;}
@@ -142,10 +144,14 @@
   table.assign th{text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); border-bottom:1.5px solid var(--ink); padding:6px 8px; font-weight:600;}
   table.assign td{padding:7px 8px; border-bottom:1px solid var(--line-soft); vertical-align:top;}
   table.assign td.score, table.assign th.score{font-family:'IBM Plex Mono',monospace; text-align:right; white-space:nowrap;}
+  table.assign td.score.fail{color:var(--danger); font-weight:700;}
   table.assign tr.total td{font-weight:700; background:var(--surface-2); border-top:1.5px solid var(--heading); border-bottom:1px solid var(--line-soft);}
   table.assign tr.total td:first-child{color:var(--heading);}
+  table.assign tr.total td.score.fail{color:var(--danger);}
   table.assign td.comment{color:var(--ink-soft); font-size:12px;}
   table.assign td.muted{color:var(--ink-faint);}
+  table.assign tr.cat-head td{background:var(--heading); color:var(--surface); font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; padding:6px 8px; border-bottom:none;}
+  table.assign tr.cat-head:first-child td{border-top:none;}
 
   .page .pf{margin-top:22px; padding-top:10px; border-top:1px solid var(--line-soft); font-size:10.5px; color:var(--ink-faint); display:flex; justify-content:space-between;}
 
@@ -634,8 +640,40 @@
   function sortedAssignments(assignments){
     return assignments.slice().sort((a, b) => {
       const catDiff = categoryRank(a.category) - categoryRank(b.category);
-      return catDiff !== 0 ? catDiff : dueSortKey(a.due) - dueSortKey(b.due);
+      if (catDiff !== 0) return catDiff;
+      const nameA = a.category || '￿';
+      const nameB = b.category || '￿';
+      return nameA !== nameB ? nameA.localeCompare(nameB) : dueSortKey(a.due) - dueSortKey(b.due);
     });
+  }
+
+  function groupedByCategory(assignments){
+    const order = [];
+    const map = new Map();
+    sortedAssignments(assignments).forEach(a => {
+      const label = a.category || 'Other';
+      if (!map.has(label)){ map.set(label, []); order.push(label); }
+      map.get(label).push(a);
+    });
+    return order.map(label => ({label, items: map.get(label)}));
+  }
+
+  function totalForLabel(totals, label){
+    return totals.find(t => t.label.toLowerCase() === label.toLowerCase()) || null;
+  }
+
+  function isFailingScore(score, maxPoints){
+    if (score === null || score === undefined) return false;
+    const s = parseFloat(score);
+    if (isNaN(s)) return false;
+    const m = maxPoints !== null && maxPoints !== undefined ? parseFloat(maxPoints) : NaN;
+    return !isNaN(m) && m > 0 ? (s / m) < 0.6 : s < 60;
+  }
+
+  function isFailingValue(value){
+    if (value === null || value === undefined) return false;
+    const v = parseFloat(value);
+    return !isNaN(v) && v < 60;
   }
 
   function renderStudentPage(course, student, index){
@@ -644,29 +682,42 @@
     const genDate = new Date().toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 
     const overallScore = findSummaryVal(student.summary, /overall score/i);
+    const overallFail = isFailingValue(overallScore);
 
     let summaryHtml = '<div class="summary"><div class="herorow">';
-    summaryHtml += `<div class="stat hero"><span class="k">Overall Score</span><span class="v">${fmtVal(overallScore)}</span></div>`;
+    summaryHtml += `<div class="stat hero${overallFail ? ' fail' : ''}"><span class="k">Overall Score</span><span class="v">${fmtVal(overallScore)}</span></div>`;
     summaryHtml += '</div></div>';
 
-    let rowsHtml = '';
-    sortedAssignments(student.assignments).forEach(a => {
-      const scoreText = a.score === null ? '—' : (fmtVal(a.score) + (a.maxPoints ? ' / ' + a.maxPoints : ''));
-      rowsHtml += `<tr>
-        <td>${escapeHtml(a.title)}</td>
-        <td class="${a.category ? '' : 'muted'}">${escapeHtml(a.category || '—')}</td>
-        <td class="muted">${escapeHtml(a.due || '—')}</td>
-        <td class="score">${escapeHtml(scoreText)}</td>
-        <td class="comment">${escapeHtml(a.comment || '')}</td>
-      </tr>`;
-    });
-    student.totals.forEach(t => {
+    function totalRowHtml(t){
       const weight = course.weightMap ? course.weightMap[t.label.toLowerCase()] : null;
-      rowsHtml += `<tr class="total">
-        <td colspan="3">${escapeHtml(t.label)} total${weight ? ' <span class="muted" style="font-weight:500;">(' + weight + ' of grade)</span>' : ''}</td>
-        <td class="score">${fmtVal(t.value)}</td>
+      const fail = isFailingValue(t.value);
+      return `<tr class="total">
+        <td colspan="2">${escapeHtml(t.label)} total${weight ? ' <span class="muted" style="font-weight:500;">(' + weight + ' of grade)</span>' : ''}</td>
+        <td class="score${fail ? ' fail' : ''}">${fmtVal(t.value)}</td>
         <td></td>
       </tr>`;
+    }
+
+    let rowsHtml = '';
+    const usedTotals = new Set();
+    groupedByCategory(student.assignments).forEach(g => {
+      rowsHtml += `<tr class="cat-head"><td colspan="4">${escapeHtml(g.label)}</td></tr>`;
+      g.items.forEach(a => {
+        const scoreText = a.score === null ? '—' : (fmtVal(a.score) + (a.maxPoints ? ' / ' + a.maxPoints : ''));
+        const fail = isFailingScore(a.score, a.maxPoints);
+        rowsHtml += `<tr>
+          <td>${escapeHtml(a.title)}</td>
+          <td class="muted">${escapeHtml(a.due || '—')}</td>
+          <td class="score${fail ? ' fail' : ''}">${escapeHtml(scoreText)}</td>
+          <td class="comment">${escapeHtml(a.comment || '')}</td>
+        </tr>`;
+      });
+      const t = totalForLabel(student.totals, g.label);
+      if (t){ usedTotals.add(t.label.toLowerCase()); rowsHtml += totalRowHtml(t); }
+    });
+    student.totals.forEach(t => {
+      if (usedTotals.has(t.label.toLowerCase())) return;
+      rowsHtml += `<tr class="cat-head"><td colspan="4">${escapeHtml(t.label)}</td></tr>` + totalRowHtml(t);
     });
 
     const page = document.createElement('article');
@@ -688,9 +739,9 @@
       <table class="assign">
         <caption>Assignment detail</caption>
         <thead><tr>
-          <th>Assignment</th><th>Category</th><th>Due</th><th class="score">Score</th><th>Comment</th>
+          <th>Assignment</th><th>Due</th><th class="score">Score</th><th>Comment</th>
         </tr></thead>
-        <tbody>${rowsHtml || '<tr><td colspan="5" class="muted">No assignments recorded.</td></tr>'}</tbody>
+        <tbody>${rowsHtml || '<tr><td colspan="4" class="muted">No assignments recorded.</td></tr>'}</tbody>
       </table>
       <div class="pf"><span>${escapeHtml(displayCourse)} &middot; ${escapeHtml(student.name)}</span><span>Grade Detail Report</span></div>
     `;
@@ -715,7 +766,18 @@
     setStatus(count ? ('Preview ready - ' + count + ' page' + (count===1?'':'s') + '.') : '');
   }
 
-  const PDF_NAVY = [0,39,76], PDF_GOLD = [255,203,5], PDF_INK = [22,34,46], PDF_SOFT = [86,102,118], PDF_LINE = [227,233,240], PDF_TINT = [238,242,247];
+  const PDF_NAVY = [0,39,76], PDF_GOLD = [255,203,5], PDF_INK = [22,34,46], PDF_SOFT = [86,102,118], PDF_LINE = [227,233,240], PDF_TINT = [238,242,247], PDF_DANGER = [164,67,47];
+
+  function pdfTotalRow(t, course){
+    const weight = course.weightMap ? course.weightMap[t.label.toLowerCase()] : null;
+    const fail = isFailingValue(t.value);
+    const totalStyles = {fontStyle:'bold', fillColor:PDF_TINT};
+    return [
+      {content: t.label + ' total' + (weight ? (' (' + weight + ' of grade)') : ''), colSpan:2, styles:totalStyles},
+      {content: t.value === null || t.value === undefined ? '—' : String(t.value), styles:Object.assign({halign:'right'}, totalStyles, fail ? {textColor:PDF_DANGER} : {})},
+      {content:'', styles:totalStyles}
+    ];
+  }
 
   function drawStudentPage(doc, course, student, pageW, pageH, margin){
     const displayCourse = course.courseNameOverride !== undefined ? course.courseNameOverride : course.courseName;
@@ -744,16 +806,17 @@
     y += 16;
 
     const overallScore = findSummaryVal(student.summary, /overall score/i);
+    const overallFail = isFailingValue(overallScore);
     const usableW = pageW - margin * 2;
 
     const heroH = 48;
     doc.setDrawColor.apply(doc, PDF_LINE); doc.setLineWidth(0.75);
     doc.rect(margin, y, usableW, heroH);
-    doc.setFillColor.apply(doc, PDF_GOLD);
+    doc.setFillColor.apply(doc, overallFail ? PDF_DANGER : PDF_GOLD);
     doc.rect(margin, y, usableW, 3, 'F');
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor.apply(doc, PDF_SOFT);
     doc.text('OVERALL SCORE', margin + 12, y + 22);
-    doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor.apply(doc, PDF_NAVY);
+    doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor.apply(doc, overallFail ? PDF_DANGER : PDF_NAVY);
     doc.text(overallScore === null || overallScore === undefined ? '—' : String(overallScore), margin + 12, y + 42);
     y += heroH;
 
@@ -763,34 +826,40 @@
     doc.text('Assignment detail', margin, y);
     y += 6;
 
-    const bodyRows = sortedAssignments(student.assignments).map(a => [
-      a.title,
-      a.category || '—',
-      a.due || '—',
-      a.score === null ? '—' : (String(a.score) + (a.maxPoints ? (' / ' + a.maxPoints) : '')),
-      a.comment || ''
-    ]);
+    const headStyles = {fillColor:PDF_NAVY, textColor:[255,255,255], fontStyle:'bold'};
+    const bodyRows = [];
+    const usedTotals = new Set();
+    groupedByCategory(student.assignments).forEach(g => {
+      bodyRows.push([{content:g.label, colSpan:4, styles:headStyles}]);
+      g.items.forEach(a => {
+        const fail = isFailingScore(a.score, a.maxPoints);
+        bodyRows.push([
+          a.title,
+          a.due || '—',
+          {content: a.score === null ? '—' : (String(a.score) + (a.maxPoints ? (' / ' + a.maxPoints) : '')), styles: fail ? {textColor:PDF_DANGER, fontStyle:'bold'} : {}},
+          a.comment || ''
+        ]);
+      });
+      const t = totalForLabel(student.totals, g.label);
+      if (t){ usedTotals.add(t.label.toLowerCase()); bodyRows.push(pdfTotalRow(t, course)); }
+    });
     student.totals.forEach(t => {
-      const weight = course.weightMap ? course.weightMap[t.label.toLowerCase()] : null;
-      const totalStyles = {fontStyle:'bold', fillColor:PDF_TINT};
-      bodyRows.push([
-        {content: t.label + ' total' + (weight ? (' (' + weight + ' of grade)') : ''), colSpan:3, styles:totalStyles},
-        {content: t.value === null || t.value === undefined ? '—' : String(t.value), styles:Object.assign({halign:'right'}, totalStyles)},
-        {content:'', styles:totalStyles}
-      ]);
+      if (usedTotals.has(t.label.toLowerCase())) return;
+      bodyRows.push([{content:t.label, colSpan:4, styles:headStyles}]);
+      bodyRows.push(pdfTotalRow(t, course));
     });
 
     doc.autoTable({
       startY: y + 8,
       margin: {left: margin, right: margin, bottom: 46},
-      head: [['Assignment','Category','Due','Score','Comment']],
-      body: bodyRows.length ? bodyRows : [['No assignments recorded.','','','','']],
+      head: [['Assignment','Due','Score','Comment']],
+      body: bodyRows.length ? bodyRows : [[{content:'No assignments recorded.', colSpan:4}]],
       theme: 'grid',
       styles: {font:'helvetica', fontSize:8.5, textColor:PDF_INK, lineColor:PDF_LINE, lineWidth:0.5, cellPadding:5, overflow:'linebreak'},
       headStyles: {fillColor:PDF_NAVY, textColor:[255,255,255], fontStyle:'bold', fontSize:7.5},
       columnStyles: {
-        0:{cellWidth:140}, 1:{cellWidth:75}, 2:{cellWidth:55},
-        3:{cellWidth:48, halign:'right'}, 4:{cellWidth:'auto'}
+        0:{cellWidth:170}, 1:{cellWidth:60},
+        2:{cellWidth:55, halign:'right'}, 3:{cellWidth:'auto'}
       }
     });
 
