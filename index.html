@@ -1,0 +1,887 @@
+<title>Grade Detail Reports</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f8fb; --surface:#ffffff; --surface-2:#eef2f7;
+    --ink:#16222e; --ink-soft:#566676; --ink-faint:#8698a8;
+    --line:#e3e9f0; --line-soft:#edf1f5;
+    --heading:#00274c;
+    --accent:#007da5; --accent-ink:#ffffff; --accent-soft:#e3f2f7;
+    --gold:#ffcb05; --gold-soft:#fff8dc;
+    --danger:#a4432f; --danger-soft:#f5e3dd;
+    --shadow: 0 1px 2px rgba(0,39,76,.06), 0 8px 24px -12px rgba(0,39,76,.18);
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0b1622; --surface:#10202f; --surface-2:#16283a;
+      --ink:#e7eef5; --ink-soft:#9db0c1; --ink-faint:#71879c;
+      --line:#24384c; --line-soft:#1c2e40;
+      --heading:#dce8f4;
+      --accent:#56b6d8; --accent-ink:#0b1622; --accent-soft:#132635;
+      --gold:#ffcb05; --gold-soft:#241f0a;
+      --danger:#e08669; --danger-soft:#2f1f19;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1622; --surface:#10202f; --surface-2:#16283a;
+    --ink:#e7eef5; --ink-soft:#9db0c1; --ink-faint:#71879c;
+    --line:#24384c; --line-soft:#1c2e40;
+    --heading:#dce8f4;
+    --accent:#56b6d8; --accent-ink:#0b1622; --accent-soft:#132635;
+    --gold:#ffcb05; --gold-soft:#241f0a;
+    --danger:#e08669; --danger-soft:#2f1f19;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter',system-ui,sans-serif; margin:0; padding-inline:16px; padding-block:28px;}
+  .wrap{max-width:920px; margin:0 auto; display:flex; flex-direction:column; gap:22px;}
+
+  h1,h2,h3{font-family:'Fraunces',Georgia,serif; font-weight:600; text-wrap:balance; margin:0; color:var(--heading);}
+  .eyebrow{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin:0 0 6px;}
+
+  header.masthead{display:flex; flex-direction:column; gap:6px; padding-bottom:10px; border-bottom:3px solid var(--gold);}
+  header.masthead h1{font-size:clamp(26px,4vw,34px);}
+  header.masthead p{margin:0; color:var(--ink-soft); font-size:14.5px; max-width:62ch; line-height:1.55;}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:20px;}
+  .card + .card{margin-top:0;}
+  .card h2{font-size:18px; margin-bottom:4px;}
+  .section-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .section-head h2{margin-bottom:4px;}
+  .help-trigger{background:none; border:none; padding:0; margin-bottom:4px; color:var(--accent); font:inherit; font-size:13px; font-weight:600; cursor:pointer; text-decoration:underline; text-underline-offset:2px;}
+  .help-trigger:hover{color:var(--heading);}
+  .card .hint{color:var(--ink-soft); font-size:13px; line-height:1.5; margin:0 0 14px;}
+
+  .dropzone{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; text-align:center; border:1.5px dashed var(--line); border-radius:var(--radius); padding:28px 16px; cursor:pointer; background:var(--surface-2); transition:border-color .15s, background .15s;}
+  .dropzone:hover, .dropzone.drag{border-color:var(--accent); background:var(--accent-soft);}
+  .dropzone .glyph{color:var(--accent);}
+  .dropzone .glyph svg{width:28px; height:28px; display:block; margin:0 auto;}
+  .dropzone .main{font-weight:600; font-size:14.5px;}
+  .dropzone .sub{font-size:12.5px; color:var(--ink-faint);}
+  input[type=file]{display:none;}
+
+  .filepill{display:flex; align-items:center; gap:10px; background:var(--surface-2); border:1px solid var(--line-soft); border-radius:8px; padding:8px 12px; font-size:13px; margin-top:10px;}
+  .filepill .name{font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .filepill .meta{color:var(--ink-faint); font-family:'IBM Plex Mono',monospace; font-size:11.5px;}
+  .filepill button{border:none; background:none; color:var(--danger); cursor:pointer; font-size:16px; line-height:1; padding:2px 4px;}
+  .filepill.error{border-color:var(--danger); background:var(--danger-soft); color:var(--danger);}
+
+  .course-block{border-top:1px solid var(--line-soft); padding-top:16px; margin-top:16px;}
+  .course-block:first-of-type{border-top:none; padding-top:0; margin-top:0;}
+  .course-block .course-head{display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:10px;}
+  .course-block .src{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-faint);}
+
+  .field-row{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;}
+  .field{display:flex; flex-direction:column; gap:5px; flex:1; min-width:180px;}
+  .field label{font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); font-weight:600;}
+  .field input[type=text]{font:inherit; font-size:14.5px; padding:9px 11px; border:1px solid var(--line); border-radius:7px; background:var(--surface); color:var(--ink);}
+  .field input[type=text]:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent);}
+
+  .roster-tools{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;}
+  .roster-tools input[type=search]{font:inherit; font-size:13.5px; padding:7px 10px; border:1px solid var(--line); border-radius:7px; background:var(--surface); color:var(--ink); flex:1; min-width:140px;}
+  .linkbtn{background:none; border:none; color:var(--accent); font-size:12.5px; font-weight:600; cursor:pointer; padding:2px 4px;}
+  .linkbtn:hover{text-decoration:underline;}
+  .count-badge{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-faint); margin-left:auto;}
+
+  .roster{display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:2px 10px; max-height:220px; overflow-y:auto; border:1px solid var(--line-soft); border-radius:8px; padding:8px 10px; background:var(--surface-2);}
+  .roster label{display:flex; align-items:center; gap:7px; font-size:13.5px; padding:4px 2px; cursor:pointer; border-radius:5px;}
+  .roster label:hover{background:var(--accent-soft);}
+  .roster input{accent-color:var(--accent);}
+
+  .actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  button.primary, button.secondary{font:inherit; font-weight:600; font-size:14.5px; padding:11px 18px; border-radius:8px; cursor:pointer; border:1px solid transparent;}
+  button.primary{background:var(--accent); color:var(--accent-ink);}
+  button.primary:hover{filter:brightness(1.06);}
+  button.secondary{background:var(--surface); color:var(--ink); border-color:var(--line);}
+  button.secondary:hover{border-color:var(--accent); color:var(--accent);}
+  button:disabled{opacity:.45; cursor:not-allowed;}
+  .actions .note{font-size:12.5px; color:var(--ink-faint);}
+
+  .print-tip{border-left:4px solid var(--gold); background:var(--gold-soft); font-size:13.5px; line-height:1.55; color:var(--ink); padding:14px 18px;}
+  .print-tip b{color:var(--heading);}
+  .print-tip kbd{font-family:'IBM Plex Mono',monospace; font-size:12px; background:var(--surface); border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; padding:1px 6px;}
+
+  #status{font-size:13px; color:var(--ink-soft); min-height:18px;}
+  #status.error{color:var(--danger);}
+
+  #preview{display:flex; flex-direction:column; gap:24px;}
+  #preview:empty{display:none;}
+
+  .page{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:34px 38px; max-width:760px; margin:0 auto; width:100%;}
+  .page-tools{display:flex; justify-content:flex-end; margin-bottom:10px;}
+  .isolate-btn{font:inherit; font-size:12.5px; font-weight:600; color:var(--accent); background:var(--accent-soft); border:none; border-radius:999px; padding:6px 14px; cursor:pointer;}
+  .isolate-btn:hover{background:var(--accent); color:var(--accent-ink);}
+  .page .ph{display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid var(--gold); padding-bottom:10px; margin-bottom:16px;}
+  .page .ph .course{font-family:'Fraunces',serif; font-size:20px; font-weight:600; color:var(--heading);}
+  .page .ph .term{font-size:12.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; margin-top:2px;}
+  .page .ph .gen{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--ink-faint); text-align:right;}
+  .page .student-line{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px;}
+  .page .student-line h3{font-size:22px;}
+  .page .uid{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-faint);}
+
+  .summary{display:flex; flex-direction:column; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-bottom:22px;}
+  .summary .herorow{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr));}
+  .summary .stat.hero{background:var(--surface); border-top:3px solid var(--gold); display:flex; flex-direction:column; gap:4px; padding:14px 16px;}
+  .summary .stat.hero .k{color:var(--ink-soft); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:700;}
+  .summary .stat.hero .v{font-family:'IBM Plex Mono',monospace; font-size:30px; font-weight:700; color:var(--heading);}
+  .summary .statrow{display:flex; flex-wrap:wrap; border-top:1px solid var(--line-soft);}
+  .summary .statrow .stat{flex:1; min-width:100px; padding:11px 14px; border-right:1px solid var(--line-soft); background:var(--surface-2); display:flex; flex-direction:column; gap:4px;}
+  .summary .statrow .stat:last-child{border-right:none;}
+  .summary .statrow .stat .k{font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:600; line-height:1.3;}
+  .summary .statrow .stat .v{font-family:'IBM Plex Mono',monospace; font-size:16px; font-weight:600;}
+
+  table.assign{width:100%; border-collapse:collapse; font-size:13px;}
+  table.assign caption{text-align:left; font-family:'Fraunces',serif; font-size:14px; font-weight:600; margin-bottom:8px;}
+  table.assign th{text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); border-bottom:1.5px solid var(--ink); padding:6px 8px; font-weight:600;}
+  table.assign td{padding:7px 8px; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  table.assign td.score, table.assign th.score{font-family:'IBM Plex Mono',monospace; text-align:right; white-space:nowrap;}
+  table.assign tr.total td{font-weight:700; background:var(--surface-2); border-top:1.5px solid var(--heading); border-bottom:1px solid var(--line-soft);}
+  table.assign tr.total td:first-child{color:var(--heading);}
+  table.assign td.comment{color:var(--ink-soft); font-size:12px;}
+  table.assign td.muted{color:var(--ink-faint);}
+
+  .page .pf{margin-top:22px; padding-top:10px; border-top:1px solid var(--line-soft); font-size:10.5px; color:var(--ink-faint); display:flex; justify-content:space-between;}
+
+  .empty{color:var(--ink-faint); font-size:13.5px; text-align:center; padding:20px;}
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(10,16,22,.55); display:flex; align-items:center; justify-content:center; padding:20px; z-index:100;}
+  .modal-overlay[hidden]{display:none;}
+  .modal{background:var(--surface); border-radius:14px; box-shadow:var(--shadow); width:100%; max-width:600px; max-height:88vh; overflow-y:auto; border:1px solid var(--line);}
+  .modal-head{position:sticky; top:0; background:var(--surface); display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:20px 22px 14px; border-bottom:1px solid var(--line-soft);}
+  .modal-head h2{font-size:19px; margin:0; padding-right:8px;}
+  .modal-close{flex:none; border:none; background:var(--surface-2); color:var(--ink-soft); width:30px; height:30px; border-radius:50%; font-size:18px; line-height:1; cursor:pointer;}
+  .modal-close:hover{background:var(--line-soft); color:var(--ink);}
+  .modal-body{padding:20px 22px 26px; display:flex; flex-direction:column; gap:20px;}
+  .mstep{display:flex; flex-direction:column; gap:12px;}
+  .mstep-head{display:flex; align-items:flex-start; gap:12px;}
+  .mstep-head .num{flex:none; width:26px; height:26px; border-radius:50%; background:var(--heading); color:var(--surface); font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:12.5px; display:flex; align-items:center; justify-content:center;}
+  .mstep-head h3{font-family:'Fraunces',Georgia,serif; font-weight:600; color:var(--heading); font-size:15.5px; margin:0 0 4px;}
+  .mstep-head p{margin:0; color:var(--ink-soft); font-size:13.5px; line-height:1.55;}
+  .mstep-head p b{color:var(--ink); font-weight:600;}
+  .mshot{margin-left:38px; border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:var(--shadow);}
+  .mshot img{display:block; width:100%; height:auto;}
+  @media (max-width:480px){ .mshot{margin-left:0;} }
+
+  @page{ size: letter; margin: 0.5in; }
+  @media print{
+    html, body{background:#fff; padding:0; margin:0; height:auto; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    .no-print{display:none !important;}
+    .wrap{display:block; max-width:none; padding:0;}
+    #preview{display:block;}
+    /* Chrome doesn't reliably honor break-after across this embedded context, so each
+       page is forced to occupy a full physical page by height, not by a break directive.
+       A student with an unusually long assignment list simply spills onto a second
+       physical sheet instead of overlapping the next student's page. */
+    .page{display:flex; flex-direction:column; min-height:10in; box-shadow:none; border:none; border-radius:0; max-width:none; width:auto; padding:0; margin:0;
+      break-after:page; page-break-after:always;}
+    .page + .page{break-before:page; page-break-before:always;}
+    .page:last-child{break-after:auto; page-break-after:auto;}
+    .page .pf{margin-top:auto;}
+    table.assign tr, table.assign thead{break-inside:avoid; page-break-inside:avoid;}
+    .summary{break-inside:avoid; page-break-inside:avoid;}
+  }
+  @media (max-width:560px){
+    .page{padding:22px 18px;}
+    .summary .stat{flex-basis:45%;}
+  }
+</style>
+
+<div class="wrap">
+  <header class="masthead no-print">
+    <p class="eyebrow">Toddle &rarr; Print</p>
+    <h1>Grade Detail Reports</h1>
+    <p>Upload the gradebook spreadsheet you downloaded from Toddle for a class. This turns it into one printable grade-detail page per student &mdash; current grade up top, every assignment score underneath &mdash; the way Veracross used to print them. Everything is parsed right here in your browser; the file never goes anywhere.</p>
+  </header>
+
+  <section class="card no-print">
+    <div class="section-head">
+      <h2>1. Upload gradebook export(s)</h2>
+      <button type="button" class="linkbtn help-trigger" id="helpBtn">Need help finding this in Toddle?</button>
+    </div>
+    <p class="hint">Select one .xlsx file per class (the file Toddle downloads, e.g. "VisualArts.xlsx"). You can add more than one if you teach multiple sections &mdash; each becomes its own set of pages. Uploaded the whole .zip Toddle gave you instead? That works too &mdash; it'll be unzipped automatically.</p>
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <div class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></div>
+      <div class="main">Click to choose file(s), or drag them here</div>
+      <div class="sub">.xlsx (or the .zip Toddle downloads) from Toddle's gradebook</div>
+    </label>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.zip" multiple>
+    <div id="fileListWrap"></div>
+    <div id="status"></div>
+  </section>
+
+  <section class="card no-print" id="controls" hidden>
+    <h2>2. Choose students &amp; check the details</h2>
+    <p class="hint">Course name and term are read from the file &mdash; edit if you'd like them to say something different on the printed page. Pick which students to include for each class.</p>
+    <div id="courseControls"></div>
+  </section>
+
+  <section class="card no-print actions" id="actionBar" hidden>
+    <button class="primary" id="generateBtn">Update preview</button>
+    <button class="primary" id="downloadBtn" hidden>Download PDF</button>
+    <span class="note" id="actionNote">Preview updates below.</span>
+  </section>
+
+  <div class="card no-print print-tip" id="printTip" hidden>
+    <p style="margin:0 0 8px;"><b>For one student:</b> scroll to their page below, click <b>Print just this page</b> on it, then press <kbd>Ctrl</kbd>+<kbd>P</kbd> (Windows) or <kbd>Cmd</kbd>+<kbd>P</kbd> (Mac) and choose <b>Save as PDF</b>.</p>
+    <p style="margin:0;"><b>For a whole class:</b> print one student at a time using that same button &mdash; printing everyone at once won't reliably split into separate pages.</p>
+  </div>
+
+  <div id="preview"></div>
+</div>
+
+<div class="modal-overlay no-print" id="helpOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="modal-head">
+      <h2 id="helpTitle">Finding your gradebook export in Toddle</h2>
+      <button type="button" class="modal-close" id="helpClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="mstep">
+        <div class="mstep-head"><span class="num">1</span><div><h3>Open the download menu</h3><p>Go to <b>Assessments</b> for the class. Click the <b>&#8942; menu</b> in the top right, then choose <b>Download</b>.</p></div></div>
+        <div class="mshot"><img src="images/download-menu.png" alt="Toddle Assessments tab with the overflow menu open, showing the Download option"></div>
+      </div>
+      <div class="mstep">
+        <div class="mstep-head"><span class="num">2</span><div><h3>Choose what to include</h3><p>Pick the grading period (e.g. <b>Semester 1</b>) and leave <b>all assessment tools checked</b> &mdash; Score, MYP Criteria, and Final remarks/comment all feed into the report. Click <b>Download</b>.</p></div></div>
+        <div class="mshot"><img src="images/download-dialog.png" alt="Toddle download dialog with grading period and assessment tool checkboxes"></div>
+      </div>
+      <div class="mstep">
+        <div class="mstep-head"><span class="num">3</span><div><h3>Come back here</h3><p>Upload the file you just downloaded above, pick your students, and print or save as a PDF. Repeat for each class you teach.</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const fileInput = document.getElementById('fileInput');
+  const dropzone = document.getElementById('dropzone');
+  const fileListWrap = document.getElementById('fileListWrap');
+  const statusEl = document.getElementById('status');
+  const controlsSection = document.getElementById('controls');
+  const courseControls = document.getElementById('courseControls');
+  const actionBar = document.getElementById('actionBar');
+  const generateBtn = document.getElementById('generateBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const actionNote = document.getElementById('actionNote');
+  const printTip = document.getElementById('printTip');
+  const preview = document.getElementById('preview');
+
+  /** courses: array of { id, fileName, error, courseName, termLabel, students, assignmentCols, totalCols, summaryCols, weightMap } */
+  let courses = [];
+  let courseSeq = 0;
+  let lastPageCount = 0;
+  let downloadsCap = null;
+  // 'pending' | 'claude' (Claude Artifacts downloads capability) | 'browser' (plain <a download>, used
+  // outside the Claude sandbox where it isn't blocked) | 'none' (inside the sandbox, capability denied)
+  let downloadMode = 'pending';
+
+  (function initDownloads(){
+    if (typeof window.claude === 'undefined' || !window.claude.use){
+      downloadMode = 'browser';
+      return;
+    }
+    window.claude.use('downloads')
+      .then(d => { downloadsCap = d; downloadMode = d ? 'claude' : 'none'; refreshActionUI(); })
+      .catch(() => { downloadMode = 'none'; refreshActionUI(); });
+  })();
+
+  function refreshActionUI(){
+    const pending = downloadMode === 'pending';
+    const ready = downloadMode === 'claude' || downloadMode === 'browser';
+    downloadBtn.hidden = !(lastPageCount > 0 && ready);
+    printTip.hidden = !(lastPageCount > 0 && !ready && !pending);
+    actionNote.textContent = 'Preview updates below.' + (lastPageCount > 0 && pending ? ' Checking for PDF download…' : '');
+  }
+
+  function setStatus(msg, isError){
+    statusEl.textContent = msg || '';
+    statusEl.classList.toggle('error', !!isError);
+  }
+
+  function isBlank(v){
+    return v === null || v === undefined || String(v).trim() === '';
+  }
+
+  function humanizeFileName(name){
+    let base = name.replace(/\.[^.]+$/, '');
+    base = base.replace(/[_-]+/g, ' ');
+    base = base.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+    base = base.replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+    base = base.replace(/\s+/g, ' ').trim();
+    return base.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1));
+  }
+
+  function expandMergedRow(row1, merges, targetRow){
+    const out = row1.slice();
+    merges.forEach(m => {
+      if (m.s.r === targetRow && m.e.r === targetRow && m.e.c > m.s.c){
+        const label = row1[m.s.c];
+        for (let c = m.s.c; c <= m.e.c; c++) out[c] = label;
+      }
+    });
+    return out;
+  }
+
+  function parseWeightMap(workbook){
+    const map = {};
+    try{
+      const name = workbook.SheetNames.find(n => /assessment categor/i.test(n));
+      if (!name) return map;
+      const ws = workbook.Sheets[name];
+      const grid = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+      const row1 = expandMergedRow(grid[0] || [], ws['!merges'] || [], 0);
+      row1.forEach(label => {
+        if (typeof label !== 'string') return;
+        const m = label.match(/^(.*?)\s*\((\d{1,3}%)\)\s*$/);
+        if (m) map[m[1].trim().toLowerCase()] = m[2];
+      });
+    } catch(e){ /* best effort only */ }
+    return map;
+  }
+
+  function parseCourseSheet(workbook, fileName){
+    let sheetName = workbook.SheetNames.find(n => /creation date/i.test(n));
+    if (!sheetName) sheetName = workbook.SheetNames.find(n => !/assessment categor/i.test(n)) || workbook.SheetNames[0];
+    const ws = workbook.Sheets[sheetName];
+    const grid = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+    if (grid.length < 3) throw new Error("This sheet doesn't have enough rows to be a gradebook export.");
+
+    const merges = ws['!merges'] || [];
+    const row1raw = grid[0] || [];
+    const row2 = grid[1] || [];
+    const ncols = Math.max(row1raw.length, row2.length);
+    const row1 = expandMergedRow(row1raw, merges, 0);
+
+    const first = (row1[0] || '').toString().trim().toLowerCase();
+    const second = (row1[1] || '').toString().trim().toLowerCase();
+    if (!/uid|id/.test(first) && !/student/.test(second)){
+      throw new Error("Didn't recognize this sheet's header row - expected the first two columns to be \"UID\" and \"Students\".");
+    }
+
+    // group consecutive columns (from col 2 onward) sharing the same row1 label
+    const segments = [];
+    for (let c = 2; c < ncols; c++){
+      const label = row1[c] == null ? null : String(row1[c]);
+      if (segments.length && segments[segments.length-1].label === label){
+        segments[segments.length-1].cols.push(c);
+      } else {
+        segments.push({label, cols:[c]});
+      }
+    }
+
+    const assignmentCols = [];
+    const totalCols = [];
+    let summaryGroup = null;
+
+    segments.forEach((seg, idx) => {
+      const rawLabel = (seg.label || '').toString();
+      const isLast = idx === segments.length - 1;
+      const trimmed = rawLabel.split('\n')[0].trim();
+
+      if (isLast){
+        const subcols = seg.cols.map(c => ({ col:c, subLabel: (row2[c] == null ? '' : String(row2[c])).trim() }))
+          .filter(sc => sc.subLabel);
+        summaryGroup = { label: trimmed || 'Term Grade', subcols };
+        return;
+      }
+
+      if (/\btotal$/i.test(trimmed)){
+        const col = seg.cols[0];
+        totalCols.push({ col, label: trimmed.replace(/\s*total$/i, '').trim(), rawLabel: trimmed });
+        return;
+      }
+
+      const parts = rawLabel.split('\n');
+      const titleLine = (parts[0] || '').trim();
+      const category = parts[1] && parts[1].trim() ? parts[1].trim() : null;
+      const dueMatch = titleLine.match(/\(([^)]+)\)\s*$/);
+      const due = dueMatch ? dueMatch[1] : null;
+      const title = (dueMatch ? titleLine.slice(0, dueMatch.index) : titleLine).replace(/\.*$/, '').trim() || titleLine;
+
+      let scoreCol = null, commentCol = null, maxPoints = null;
+      seg.cols.forEach(c => {
+        const sub = (row2[c] == null ? '' : String(row2[c])).trim();
+        if (/comment/i.test(sub)) commentCol = c;
+        else {
+          scoreCol = c;
+          const mm = sub.match(/\((\d+)\)/);
+          if (mm) maxPoints = mm[1];
+        }
+      });
+      assignmentCols.push({ title, category, due, scoreCol, commentCol, maxPoints });
+    });
+
+    const students = [];
+    for (let r = 2; r < grid.length; r++){
+      const row = grid[r] || [];
+      if (isBlank(row[0]) && isBlank(row[1])) continue;
+      const rec = {
+        uid: row[0],
+        name: isBlank(row[1]) ? '(Unnamed student)' : String(row[1]),
+        assignments: assignmentCols.map(a => ({
+          title:a.title, category:a.category, due:a.due, maxPoints:a.maxPoints,
+          score: isBlank(row[a.scoreCol]) ? null : row[a.scoreCol],
+          comment: a.commentCol != null && !isBlank(row[a.commentCol]) ? row[a.commentCol] : null
+        })),
+        totals: totalCols.map(t => ({ label:t.label, value: isBlank(row[t.col]) ? null : row[t.col] })),
+        summary: summaryGroup ? summaryGroup.subcols.map(sc => ({ label:sc.subLabel, value: isBlank(row[sc.col]) ? null : row[sc.col] })) : []
+      };
+      students.push(rec);
+    }
+
+    const weightMap = parseWeightMap(workbook);
+
+    return {
+      sheetName,
+      courseName: humanizeFileName(fileName),
+      termLabel: summaryGroup ? summaryGroup.label : '',
+      students,
+      weightMap
+    };
+  }
+
+  function addFiles(fileArr){
+    fileArr.forEach(file => {
+      if (/\.zip$/i.test(file.name)) addZipFile(file);
+      else addWorkbookFile(file.name, () => file.arrayBuffer());
+    });
+  }
+
+  function addWorkbookFile(displayName, getArrayBuffer){
+    const id = 'c' + (++courseSeq);
+    const pill = document.createElement('div');
+    pill.className = 'filepill';
+    pill.id = 'pill-' + id;
+    pill.innerHTML = '<span class="name">'+ escapeHtml(displayName) +'</span><span class="meta">reading&hellip;</span><button title="Remove" aria-label="Remove">&times;</button>';
+    fileListWrap.appendChild(pill);
+    pill.querySelector('button').addEventListener('click', () => {
+      courses = courses.filter(c => c.id !== id);
+      pill.remove();
+      renderControls();
+    });
+
+    Promise.resolve().then(getArrayBuffer).then(buf => {
+      try{
+        const data = new Uint8Array(buf);
+        const workbook = XLSX.read(data, {type:'array'});
+        const parsed = parseCourseSheet(workbook, displayName);
+        courses.push({ id, fileName:displayName, error:null, selected: parsed.students.map(() => true), ...parsed });
+        pill.querySelector('.meta').textContent = parsed.students.length + ' student' + (parsed.students.length===1?'':'s');
+        setStatus('');
+      } catch(err){
+        courses.push({ id, fileName:displayName, error: err.message || String(err) });
+        pill.classList.add('error');
+        pill.querySelector('.meta').textContent = "couldn't read this file";
+        setStatus('"' + displayName + '": ' + (err.message || err), true);
+      }
+      renderControls();
+    }).catch(() => {
+      courses.push({ id, fileName:displayName, error:'File could not be read.' });
+      pill.classList.add('error');
+      pill.querySelector('.meta').textContent = 'read error';
+      renderControls();
+    });
+  }
+
+  function addZipFile(file){
+    const id = 'zip' + (++courseSeq);
+    const pill = document.createElement('div');
+    pill.className = 'filepill';
+    pill.id = 'pill-' + id;
+    pill.innerHTML = '<span class="name">'+ escapeHtml(file.name) +'</span><span class="meta">unzipping&hellip;</span><button title="Remove" aria-label="Remove">&times;</button>';
+    fileListWrap.appendChild(pill);
+    let cancelled = false;
+    pill.querySelector('button').addEventListener('click', () => { cancelled = true; pill.remove(); });
+
+    file.arrayBuffer()
+      .then(buf => JSZip.loadAsync(buf))
+      .then(zip => {
+        if (cancelled) return;
+        const entries = Object.values(zip.files).filter(f =>
+          !f.dir && /\.xlsx?$/i.test(f.name) &&
+          !/(^|\/)__MACOSX\//.test(f.name) &&
+          !/^\._/.test(f.name.split('/').pop())
+        );
+        pill.remove();
+        if (!entries.length){
+          setStatus('"' + file.name + '": no .xlsx files found inside this zip.', true);
+          return;
+        }
+        entries.forEach(entry => {
+          const shortName = entry.name.split('/').pop();
+          addWorkbookFile(shortName, () => entry.async('arraybuffer'));
+        });
+      })
+      .catch(err => {
+        if (cancelled) return;
+        pill.classList.add('error');
+        pill.querySelector('.meta').textContent = "couldn't unzip this file";
+        setStatus('"' + file.name + '": ' + (err.message || err), true);
+      });
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderControls(){
+    const good = courses.filter(c => !c.error);
+    controlsSection.hidden = good.length === 0;
+    actionBar.hidden = good.length === 0;
+    courseControls.innerHTML = '';
+
+    good.forEach(course => {
+      const block = document.createElement('div');
+      block.className = 'course-block';
+      block.dataset.id = course.id;
+      block.innerHTML = `
+        <div class="course-head">
+          <strong>${escapeHtml(course.courseName)}</strong>
+          <span class="src">${escapeHtml(course.fileName)} &middot; ${escapeHtml(course.sheetName)}</span>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Course name on report</label>
+            <input type="text" class="course-name" value="${escapeHtml(course.courseName)}">
+          </div>
+          <div class="field">
+            <label>Term / semester on report</label>
+            <input type="text" class="term-name" value="${escapeHtml(course.termLabel)}">
+          </div>
+        </div>
+        <div class="roster-tools">
+          <input type="search" class="roster-search" placeholder="Filter students&hellip;">
+          <button type="button" class="linkbtn all">Select all</button>
+          <button type="button" class="linkbtn none">Select none</button>
+          <span class="count-badge">${course.selected.filter(Boolean).length} / ${course.students.length} selected</span>
+        </div>
+        <div class="roster"></div>
+      `;
+      const rosterEl = block.querySelector('.roster');
+      course.students.forEach((s, i) => {
+        const lbl = document.createElement('label');
+        lbl.innerHTML = `<input type="checkbox" data-i="${i}" ${course.selected[i] ? 'checked':''}> <span>${escapeHtml(s.name)}</span>`;
+        rosterEl.appendChild(lbl);
+      });
+
+      const countBadge = block.querySelector('.count-badge');
+      const updateCount = () => { countBadge.textContent = course.selected.filter(Boolean).length + ' / ' + course.students.length + ' selected'; };
+
+      rosterEl.addEventListener('change', (e) => {
+        const i = +e.target.dataset.i;
+        course.selected[i] = e.target.checked;
+        updateCount();
+      });
+      block.querySelector('.all').addEventListener('click', () => {
+        course.selected = course.students.map(() => true);
+        rosterEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true);
+        updateCount();
+      });
+      block.querySelector('.none').addEventListener('click', () => {
+        course.selected = course.students.map(() => false);
+        rosterEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+        updateCount();
+      });
+      block.querySelector('.roster-search').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        rosterEl.querySelectorAll('label').forEach((lbl, i) => {
+          lbl.style.display = course.students[i].name.toLowerCase().includes(q) ? '' : 'none';
+        });
+      });
+      block.querySelector('.course-name').addEventListener('input', (e) => { course.courseNameOverride = e.target.value; });
+      block.querySelector('.term-name').addEventListener('input', (e) => { course.termLabelOverride = e.target.value; });
+
+      courseControls.appendChild(block);
+    });
+  }
+
+  function fmtVal(v){
+    if (v === null || v === undefined) return '—';
+    return String(v);
+  }
+
+  function findSummaryVal(summary, matcher){
+    const hit = summary.find(s => matcher.test(s.label));
+    return hit ? hit.value : undefined;
+  }
+
+  function renderStudentPage(course, student, index){
+    const displayCourse = course.courseNameOverride !== undefined ? course.courseNameOverride : course.courseName;
+    const displayTerm = course.termLabelOverride !== undefined ? course.termLabelOverride : course.termLabel;
+    const genDate = new Date().toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
+
+    const overallScore = findSummaryVal(student.summary, /overall score/i);
+    const otherSummary = student.summary.filter(s => !/final grade/i.test(s.label) && !/overall score/i.test(s.label));
+
+    let summaryHtml = '<div class="summary"><div class="herorow">';
+    summaryHtml += `<div class="stat hero"><span class="k">Overall Score</span><span class="v">${fmtVal(overallScore)}</span></div>`;
+    summaryHtml += '</div>';
+    if (otherSummary.length){
+      summaryHtml += '<div class="statrow">';
+      otherSummary.forEach(s => {
+        summaryHtml += `<div class="stat"><span class="k">${escapeHtml(s.label.replace(/^\(|\)$/g,''))}</span><span class="v">${fmtVal(s.value)}</span></div>`;
+      });
+      summaryHtml += '</div>';
+    }
+    summaryHtml += '</div>';
+
+    let rowsHtml = '';
+    student.assignments.forEach(a => {
+      const scoreText = a.score === null ? '—' : (fmtVal(a.score) + (a.maxPoints ? ' / ' + a.maxPoints : ''));
+      rowsHtml += `<tr>
+        <td>${escapeHtml(a.title)}</td>
+        <td class="${a.category ? '' : 'muted'}">${escapeHtml(a.category || '—')}</td>
+        <td class="muted">${escapeHtml(a.due || '—')}</td>
+        <td class="score">${escapeHtml(scoreText)}</td>
+        <td class="comment">${escapeHtml(a.comment || '')}</td>
+      </tr>`;
+    });
+    student.totals.forEach(t => {
+      const weight = course.weightMap ? course.weightMap[t.label.toLowerCase()] : null;
+      rowsHtml += `<tr class="total">
+        <td colspan="3">${escapeHtml(t.label)} total${weight ? ' <span class="muted" style="font-weight:500;">(' + weight + ' of grade)</span>' : ''}</td>
+        <td class="score">${fmtVal(t.value)}</td>
+        <td></td>
+      </tr>`;
+    });
+
+    const page = document.createElement('article');
+    page.className = 'page';
+    page.innerHTML = `
+      <div class="page-tools no-print"><button type="button" class="isolate-btn" data-course="${course.id}" data-index="${index}">Print just this page &rarr;</button></div>
+      <div class="ph">
+        <div>
+          <div class="course">${escapeHtml(displayCourse)}</div>
+          <div class="term">${escapeHtml(displayTerm || '')}</div>
+        </div>
+        <div class="gen">Generated ${genDate}</div>
+      </div>
+      <div class="student-line">
+        <h3>${escapeHtml(student.name)}</h3>
+        <span class="uid">${student.uid !== null && student.uid !== undefined ? 'ID ' + escapeHtml(student.uid) : ''}</span>
+      </div>
+      ${summaryHtml}
+      <table class="assign">
+        <caption>Assignment detail</caption>
+        <thead><tr>
+          <th>Assignment</th><th>Category</th><th>Due</th><th class="score">Score</th><th>Comment</th>
+        </tr></thead>
+        <tbody>${rowsHtml || '<tr><td colspan="5" class="muted">No assignments recorded.</td></tr>'}</tbody>
+      </table>
+      <div class="pf"><span>${escapeHtml(displayCourse)} &middot; ${escapeHtml(student.name)}</span><span>Grade Detail Report</span></div>
+    `;
+    return page;
+  }
+
+  function generatePreview(){
+    preview.innerHTML = '';
+    let count = 0;
+    courses.filter(c => !c.error).forEach(course => {
+      course.students.forEach((s, i) => {
+        if (!course.selected[i]) return;
+        preview.appendChild(renderStudentPage(course, s, i));
+        count++;
+      });
+    });
+    lastPageCount = count;
+    refreshActionUI();
+    if (count === 0){
+      preview.innerHTML = '<p class="empty no-print">No students selected &mdash; check at least one box above, then Update preview.</p>';
+    }
+    setStatus(count ? ('Preview ready - ' + count + ' page' + (count===1?'':'s') + '.') : '');
+  }
+
+  const PDF_NAVY = [0,39,76], PDF_GOLD = [255,203,5], PDF_INK = [22,34,46], PDF_SOFT = [86,102,118], PDF_LINE = [227,233,240], PDF_TINT = [238,242,247];
+
+  function drawStudentPage(doc, course, student, pageW, pageH, margin){
+    const displayCourse = course.courseNameOverride !== undefined ? course.courseNameOverride : course.courseName;
+    const displayTerm = course.termLabelOverride !== undefined ? course.termLabelOverride : course.termLabel;
+    const genDate = new Date().toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
+    let y = margin;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor.apply(doc, PDF_NAVY);
+    doc.text(String(displayCourse), margin, y + 10);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, PDF_SOFT);
+    doc.text(String(displayTerm || '').toUpperCase(), margin, y + 24);
+    doc.setFontSize(7.5);
+    doc.text('Generated ' + genDate, pageW - margin, y + 10, {align:'right'});
+
+    y += 30;
+    doc.setDrawColor.apply(doc, PDF_GOLD); doc.setLineWidth(2);
+    doc.line(margin, y, pageW - margin, y);
+    y += 26;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor.apply(doc, PDF_NAVY);
+    doc.text(String(student.name), margin, y);
+    if (student.uid !== null && student.uid !== undefined){
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor.apply(doc, PDF_SOFT);
+      doc.text('ID ' + String(student.uid), pageW - margin, y, {align:'right'});
+    }
+    y += 16;
+
+    const overallScore = findSummaryVal(student.summary, /overall score/i);
+    const otherSummary = student.summary.filter(s => !/final grade/i.test(s.label) && !/overall score/i.test(s.label));
+    const usableW = pageW - margin * 2;
+
+    const heroH = 48;
+    doc.setDrawColor.apply(doc, PDF_LINE); doc.setLineWidth(0.75);
+    doc.rect(margin, y, usableW, heroH);
+    doc.setFillColor.apply(doc, PDF_GOLD);
+    doc.rect(margin, y, usableW, 3, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor.apply(doc, PDF_SOFT);
+    doc.text('OVERALL SCORE', margin + 12, y + 22);
+    doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor.apply(doc, PDF_NAVY);
+    doc.text(overallScore === null || overallScore === undefined ? '—' : String(overallScore), margin + 12, y + 42);
+    y += heroH;
+
+    if (otherSummary.length){
+      const rowH = 32;
+      const colW = usableW / otherSummary.length;
+      doc.setDrawColor.apply(doc, PDF_LINE); doc.setLineWidth(0.75);
+      doc.rect(margin, y, usableW, rowH);
+      otherSummary.forEach((s, idx) => {
+        const x = margin + idx * colW;
+        if (idx > 0){ doc.line(x, y, x, y + rowH); }
+        doc.setFont('helvetica','bold'); doc.setFontSize(6.5); doc.setTextColor.apply(doc, PDF_SOFT);
+        doc.text(String(s.label.replace(/^\(|\)$/g,'')).toUpperCase(), x + 8, y + 13);
+        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor.apply(doc, PDF_INK);
+        doc.text(s.value === null || s.value === undefined ? '—' : String(s.value), x + 8, y + 26);
+      });
+      y += rowH;
+    }
+    y += 18;
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor.apply(doc, PDF_NAVY);
+    doc.text('Assignment detail', margin, y);
+    y += 6;
+
+    const bodyRows = student.assignments.map(a => [
+      a.title,
+      a.category || '—',
+      a.due || '—',
+      a.score === null ? '—' : (String(a.score) + (a.maxPoints ? (' / ' + a.maxPoints) : '')),
+      a.comment || ''
+    ]);
+    student.totals.forEach(t => {
+      const weight = course.weightMap ? course.weightMap[t.label.toLowerCase()] : null;
+      const totalStyles = {fontStyle:'bold', fillColor:PDF_TINT};
+      bodyRows.push([
+        {content: t.label + ' total' + (weight ? (' (' + weight + ' of grade)') : ''), colSpan:3, styles:totalStyles},
+        {content: t.value === null || t.value === undefined ? '—' : String(t.value), styles:Object.assign({halign:'right'}, totalStyles)},
+        {content:'', styles:totalStyles}
+      ]);
+    });
+
+    doc.autoTable({
+      startY: y + 8,
+      margin: {left: margin, right: margin, bottom: 46},
+      head: [['Assignment','Category','Due','Score','Comment']],
+      body: bodyRows.length ? bodyRows : [['No assignments recorded.','','','','']],
+      theme: 'grid',
+      styles: {font:'helvetica', fontSize:8.5, textColor:PDF_INK, lineColor:PDF_LINE, lineWidth:0.5, cellPadding:5, overflow:'linebreak'},
+      headStyles: {fillColor:PDF_NAVY, textColor:[255,255,255], fontStyle:'bold', fontSize:7.5},
+      columnStyles: {
+        0:{cellWidth:140}, 1:{cellWidth:75}, 2:{cellWidth:55},
+        3:{cellWidth:48, halign:'right'}, 4:{cellWidth:'auto'}
+      }
+    });
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor.apply(doc, PDF_SOFT);
+    doc.text(String(displayCourse) + ' · ' + String(student.name), margin, pageH - 26);
+    doc.text('Grade Detail Report', pageW - margin, pageH - 26, {align:'right'});
+  }
+
+  function buildPdf(){
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({unit:'pt', format:'letter', compress:true});
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 40;
+    let n = 0;
+    courses.filter(c => !c.error).forEach(course => {
+      course.students.forEach((s, i) => {
+        if (!course.selected[i]) return;
+        if (n > 0) doc.addPage();
+        drawStudentPage(doc, course, s, pageW, pageH, margin);
+        n++;
+      });
+    });
+    return n ? doc.output('blob') : null;
+  }
+
+  async function handleDownload(){
+    const blob = buildPdf();
+    if (!blob){ setStatus('No students selected.', true); return; }
+    downloadBtn.disabled = true;
+    const original = downloadBtn.textContent;
+    downloadBtn.textContent = 'Preparing PDF…';
+    try{
+      const name = (courses.filter(c=>!c.error)[0]?.courseNameOverride ?? courses.filter(c=>!c.error)[0]?.courseName ?? 'grade-detail-report').replace(/[^\w\- ]+/g,'').trim() || 'grade-detail-report';
+      if (downloadMode === 'claude'){
+        await downloadsCap.save({ filename: name + '.pdf', data: blob });
+        setStatus('PDF saved.');
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name + '.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        setStatus('PDF downloaded.');
+      }
+    } catch(err){
+      if (err && err.code === 'declined'){ /* user said no, nothing to report */ }
+      else { setStatus('Could not save the PDF' + (err && err.message ? (': ' + err.message) : '') + '.', true); }
+    } finally {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = original;
+    }
+  }
+
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files.length) addFiles(Array.from(e.target.files));
+    fileInput.value = '';
+  });
+  ['dragover','dragenter'].forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+  dropzone.addEventListener('drop', (e) => {
+    const files = Array.from(e.dataTransfer.files || []).filter(f => /\.(xlsx?|zip)$/i.test(f.name));
+    if (files.length) addFiles(files);
+  });
+
+  generateBtn.addEventListener('click', generatePreview);
+  downloadBtn.addEventListener('click', handleDownload);
+
+  const helpBtn = document.getElementById('helpBtn');
+  const helpOverlay = document.getElementById('helpOverlay');
+  const helpClose = document.getElementById('helpClose');
+  const openHelp = () => { helpOverlay.hidden = false; };
+  const closeHelp = () => { helpOverlay.hidden = true; };
+  helpBtn.addEventListener('click', openHelp);
+  helpClose.addEventListener('click', closeHelp);
+  helpOverlay.addEventListener('click', (e) => { if (e.target === helpOverlay) closeHelp(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !helpOverlay.hidden) closeHelp(); });
+
+  preview.addEventListener('click', (e) => {
+    const btn = e.target.closest('.isolate-btn');
+    if (!btn) return;
+    const targetCourseId = btn.dataset.course;
+    const targetIndex = +btn.dataset.index;
+    courses.forEach(course => {
+      course.selected = course.students.map((_, i) => course.id === targetCourseId && i === targetIndex);
+    });
+    renderControls();
+    generatePreview();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  });
+})();
+</script>
